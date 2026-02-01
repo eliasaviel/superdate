@@ -2,51 +2,50 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const jwt = require("jsonwebtoken");
-const { Pool } = require("pg");
+
+// Shared DB pool
+const { pool } = require("./db");
+
+// Middleware
+const requireAuth = require("./src/middleware/requireAuth");
 
 // Routes
 const authRoutes = require("./src/routes/auth.routes");
+const discoveryRoutes = require("./src/routes/discovery.routes");
+const swipeRoutes = require("./src/routes/swipe.routes");
 
 const app = express();
 
 // =====================
-// MIDDLEWARE (ORDER MATTERS)
+// MIDDLEWARE
 // =====================
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// -------------------- DB --------------------
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+// =====================
+// DEBUG (TEMP)
+// =====================
+console.log("DEBUG typeof authRoutes:", typeof authRoutes);
+console.log("DEBUG typeof discoveryRoutes:", typeof discoveryRoutes);
+console.log("DEBUG typeof swipeRoutes:", typeof swipeRoutes);
+console.log("DEBUG typeof requireAuth:", typeof requireAuth);
 
-// -------------------- JWT --------------------
-const JWT_SECRET = process.env.JWT_SECRET || "dev_secret_change_later";
-
-// Make these available to routes/controllers
-app.locals.pool = pool;
-app.locals.JWT_SECRET = JWT_SECRET;
-
-// -------------------- Auth middleware --------------------
-function requireAuth(req, res, next) {
-  const auth = req.headers.authorization || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-
-  if (!token) {
-    return res.status(401).json({ ok: false, error: "Missing token" });
-  }
-
-  try {
-    req.user = jwt.verify(token, JWT_SECRET);
-    next();
-  } catch (err) {
-    return res.status(401).json({ ok: false, error: "Invalid token" });
+function assertIsMiddleware(name, fn) {
+  if (typeof fn !== "function") {
+    console.error(`❌ ${name} is NOT a function. You probably exported { router } instead of router.`);
+    console.error(`❌ Fix ${name} export to: module.exports = router;`);
+    process.exit(1);
   }
 }
+assertIsMiddleware("authRoutes", authRoutes);
+assertIsMiddleware("discoveryRoutes", discoveryRoutes);
+assertIsMiddleware("swipeRoutes", swipeRoutes);
+assertIsMiddleware("requireAuth", requireAuth);
 
-// -------------------- Routes --------------------
+// =====================
+// ROUTES
+// =====================
 
 // Health check
 app.get("/health", async (req, res) => {
@@ -58,10 +57,14 @@ app.get("/health", async (req, res) => {
   }
 });
 
-// Auth routes
+// Auth
 app.use("/auth", authRoutes);
 
-// -------- ME --------
+// Discovery & swipe (protected)
+app.use("/discovery", requireAuth, discoveryRoutes);
+app.use("/swipe", requireAuth, swipeRoutes);
+
+// -------------------- ME --------------------
 app.get("/me", requireAuth, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -75,10 +78,9 @@ app.get("/me", requireAuth, async (req, res) => {
       return res.status(404).json({ ok: false, error: "User not found" });
     }
 
-    const p = await pool.query(
-      "SELECT * FROM profiles WHERE user_id = $1",
-      [userId]
-    );
+    const p = await pool.query("SELECT * FROM profiles WHERE user_id = $1", [
+      userId,
+    ]);
 
     res.json({
       ok: true,
@@ -175,7 +177,7 @@ app.put("/me/profile", requireAuth, async (req, res) => {
   }
 });
 
-// -------- SEARCH --------
+// -------------------- SEARCH --------------------
 app.get("/search", requireAuth, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -189,7 +191,6 @@ app.get("/search", requireAuth, async (req, res) => {
     const where = [];
     const params = [];
 
-    // exclude myself
     params.push(userId);
     where.push(`p.user_id <> $${params.length}`);
 
@@ -240,8 +241,8 @@ app.get("/search", requireAuth, async (req, res) => {
   }
 });
 
-// -------------------- Start --------------------
+// =====================
+// START SERVER
+// =====================
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () =>
-  console.log(`Superdate API running on port ${PORT}`)
-);
+app.listen(PORT, () => console.log(`🚀 Superdate API running on port ${PORT}`));
