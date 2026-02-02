@@ -54,22 +54,22 @@ export default function App() {
   const isAuthed = useMemo(() => !!token, [token]);
   const [status, setStatus] = useState("");
 
-  async function refreshMe(t = token) {
-    if (!t) return;
-    const data = await apiFetch("/me", { token: t });
-    setMe(data.user);
-    if (data.profile) {
-      setProfile((p) => ({
-        ...p,
-        ...data.profile,
-        // birth_date can come as full ISO -> keep just YYYY-MM-DD for <input type="date">
-        birth_date: data.profile.birth_date
-          ? String(data.profile.birth_date).slice(0, 10)
-          : "",
-      }));
-    }
-    return data;
+async function refreshMe(t = token) {
+  if (!t) return;
+  const data = await api.me(t); // ✅ mock or real
+  setMe(data.user);
+  if (data.profile) {
+    setProfile((p) => ({
+      ...p,
+      ...data.profile,
+      birth_date: data.profile.birth_date
+        ? String(data.profile.birth_date).slice(0, 10)
+        : "",
+    }));
   }
+  return data;
+}
+
 
 async function refreshDiscovery(t = token) {
   if (!t) return;
@@ -101,60 +101,52 @@ useEffect(() => {
 }, [token]);
 
 
-  async function onRegister(e) {
-    e.preventDefault();
-    setStatus("Registering...");
-    try {
-      const data = await apiFetch("/auth/register", {
-        method: "POST",
-        body: { phone, pin },
-      });
-      setToken(data.token);
-      setTokenState(data.token);
-      setStatus("✅ Registered + logged in");
-      await refreshMe(data.token);
-    } catch (e2) {
-      setStatus(`❌ ${e2.message}`);
-    }
+async function onRegister(e) {
+  e.preventDefault();
+  setStatus("Registering...");
+  try {
+    const data = await api.register(phone, pin); // ✅ mock or real
+    setToken(data.token);
+    setTokenState(data.token);
+    setStatus("✅ Registered + logged in");
+    await refreshMe(data.token);
+  } catch (e2) {
+    setStatus(`❌ ${e2.message}`);
   }
+}
 
-  async function onLogin(e) {
-    e.preventDefault();
-    setStatus("Logging in...");
-    try {
-      const data = await apiFetch("/auth/login", {
-        method: "POST",
-        body: { phone, pin },
-      });
-      setToken(data.token);
-      setTokenState(data.token);
-      setStatus("✅ Logged in");
-      await refreshMe(data.token);
-    } catch (e2) {
-      setStatus(`❌ ${e2.message}`);
-    }
-  }
 
-  async function onSaveProfile(e) {
-    e.preventDefault();
-    setStatus("Saving profile...");
-    try {
-      const data = await apiFetch("/me/profile", {
-        token,
-        method: "PUT",
-        body: {
-          ...profile,
-          birth_date: profile.birth_date || null,
-        },
-      });
-      setStatus("✅ Profile saved");
-      // refresh /me to see everything
-      await refreshMe();
-      return data;
-    } catch (e2) {
-      setStatus(`❌ ${e2.message}`);
-    }
+async function onLogin(e) {
+  e.preventDefault();
+  setStatus("Logging in...");
+  try {
+    const data = await api.login(phone, pin); // ✅ mock or real
+    setToken(data.token);
+    setTokenState(data.token);
+    setStatus("✅ Logged in");
+    await refreshMe(data.token);
+  } catch (e2) {
+    setStatus(`❌ ${e2.message}`);
   }
+}
+
+async function onSaveProfile(e) {
+  e.preventDefault();
+  setStatus("Saving profile...");
+  try {
+    const data = await api.saveProfile(token, {
+      ...profile,
+      birth_date: profile.birth_date || null,
+    });
+
+    setStatus("✅ Profile saved");
+    await refreshMe(); // works with mock or real
+    return data;
+  } catch (e2) {
+    setStatus(`❌ ${e2.message}`);
+  }
+}
+
 
   function onLogout() {
     clearToken();
