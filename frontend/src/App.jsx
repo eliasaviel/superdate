@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { api } from "./api";
+
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
@@ -33,6 +35,8 @@ export default function App() {
   const [token, setTokenState] = useState(getToken());
   const [phone, setPhone] = useState("+972");
   const [pin, setPin] = useState("1234");
+  const [profiles, setProfiles] = useState([]);
+
 
   const [me, setMe] = useState(null);
   const [profile, setProfile] = useState({
@@ -67,6 +71,14 @@ export default function App() {
     return data;
   }
 
+async function refreshDiscovery(t = token) {
+  if (!t) return;
+  const r = await api.discovery(t);
+  setProfiles(r.results || []);
+  return r;
+}
+
+
   useEffect(() => {
     if (token) {
       refreshMe().catch((e) => setStatus(`❌ ${e.message}`));
@@ -75,6 +87,19 @@ export default function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+useEffect(() => {
+  if (!token) {
+    setProfiles([]);
+    return;
+  }
+
+  refreshDiscovery().catch((e) =>
+    setStatus(`❌ Discovery failed: ${e.message}`)
+  );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [token]);
+
 
   async function onRegister(e) {
     e.preventDefault();
@@ -221,6 +246,47 @@ export default function App() {
                   {JSON.stringify(me, null, 2)}
                 </pre>
               </div>
+              <div style={styles.box}>
+  <h2 style={styles.h2}>/discovery</h2>
+
+  <button
+    style={styles.btnSecondary}
+    onClick={() =>
+      refreshDiscovery().catch((e) => setStatus(`❌ ${e.message}`))
+    }
+  >
+    Refresh Discovery
+  </button>
+
+  <div style={{ marginTop: 12 }}>
+    {profiles.length === 0 ? (
+      <div style={{ opacity: 0.8 }}>No profiles yet</div>
+    ) : (
+      profiles.map((p) => (
+        <div
+          key={p.user_id}
+          style={{
+            padding: 12,
+            borderRadius: 12,
+            border: "1px solid rgba(255,255,255,0.08)",
+            marginBottom: 10,
+            background: "#0b1220",
+          }}
+        >
+          <div style={{ fontWeight: 700 }}>
+            {p.first_name} {p.last_name}{" "}
+            {p.age ? <span style={{ opacity: 0.8 }}>({p.age})</span> : null}
+          </div>
+          <div style={{ opacity: 0.85 }}>
+            {p.city ? `${p.city} • ` : ""}{p.gender || ""} {p.religion ? `• ${p.religion}` : ""}
+          </div>
+          {p.bio ? <div style={{ marginTop: 6, opacity: 0.9 }}>{p.bio}</div> : null}
+        </div>
+      ))
+    )}
+  </div>
+</div>
+
 
               <form onSubmit={onSaveProfile} style={styles.box}>
                 <h2 style={styles.h2}>Edit Profile</h2>
